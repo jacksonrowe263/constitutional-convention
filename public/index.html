@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Constitutional Convention Simulator</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <!-- SCREEN 1: Setup -->
+    <div id="screen-setup" class="screen active">
+        <header class="setup-header">
+            <h1>Constitutional Convention Simulator</h1>
+            <p class="subtitle">Convene a deliberative assembly of history's greatest minds</p>
+        </header>
+
+        <div class="setup-container">
+            <!-- Step 1: API Configuration -->
+            <section class="setup-section">
+                <label class="section-label">
+                    <span class="step-number">1</span>
+                    API Configuration
+                </label>
+                <div class="api-config">
+                    <div class="provider-select">
+                        <label for="provider-select" class="field-label">Provider</label>
+                        <select id="provider-select">
+                            <option value="anthropic">Anthropic (Claude)</option>
+                            <option value="openai">OpenAI (GPT)</option>
+                        </select>
+                    </div>
+                    <div class="model-select">
+                        <label for="model-select" class="field-label">Model</label>
+                        <select id="model-select"></select>
+                    </div>
+                    <div class="api-key-input">
+                        <label for="api-key" class="field-label">API Key</label>
+                        <input type="password" id="api-key"
+                            placeholder="sk-..." autocomplete="off">
+                        <p class="hint">Your key is sent directly to the provider — it is never stored on the server.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 2: Prompt -->
+            <section class="setup-section">
+                <label for="convention-prompt" class="section-label">
+                    <span class="step-number">2</span>
+                    Topic for Deliberation
+                </label>
+                <textarea id="convention-prompt" rows="3"
+                    placeholder="e.g., Draft a framework for governing artificial intelligence"></textarea>
+            </section>
+
+            <!-- Step 3: Delegate Count -->
+            <section class="setup-section">
+                <label class="section-label">
+                    <span class="step-number">3</span>
+                    Number of Delegates
+                </label>
+                <div class="delegate-count-controls">
+                    <button id="count-minus" class="count-btn" aria-label="Decrease">−</button>
+                    <span id="delegate-count">5</span>
+                    <button id="count-plus" class="count-btn" aria-label="Increase">+</button>
+                </div>
+            </section>
+
+            <!-- Step 4: Debate Rounds -->
+            <section class="setup-section">
+                <label class="section-label">
+                    <span class="step-number">4</span>
+                    Debate Rounds
+                </label>
+                <div class="delegate-count-controls">
+                    <button id="rounds-minus" class="count-btn" aria-label="Decrease">−</button>
+                    <span id="debate-rounds">3</span>
+                    <button id="rounds-plus" class="count-btn" aria-label="Increase">+</button>
+                </div>
+                <p class="hint">Each round gives every delegate one turn to speak.</p>
+            </section>
+
+            <!-- Step 5: Select Delegates -->
+            <section class="setup-section">
+                <label class="section-label">
+                    <span class="step-number">5</span>
+                    Select Delegates
+                </label>
+                <div class="delegate-actions">
+                    <button id="btn-auto-select" class="btn btn-secondary">Auto-Select Based on Topic</button>
+                    <button id="btn-clear-selection" class="btn btn-ghost">Clear Selection</button>
+                </div>
+                <div class="selection-status">
+                    <span id="selection-count">0</span> / <span id="selection-max">5</span> delegates selected
+                </div>
+
+                <!-- Category filters -->
+                <div id="category-filters" class="category-filters"></div>
+
+                <!-- Delegate grid -->
+                <div id="delegate-grid" class="delegate-grid"></div>
+            </section>
+
+            <!-- Start button -->
+            <div class="start-section">
+                <button id="btn-start" class="btn btn-primary btn-large" disabled>
+                    Convene the Convention
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCREEN 2: Convention -->
+    <div id="screen-convention" class="screen">
+        <header class="convention-header">
+            <div class="convention-title">
+                <h1>Convention in Session</h1>
+                <p id="convention-topic" class="convention-topic"></p>
+            </div>
+            <div class="convention-controls">
+                <span id="turn-indicator" class="turn-indicator"></span>
+                <button id="btn-stop" class="btn btn-ghost btn-small">End Early</button>
+            </div>
+        </header>
+
+        <div class="convention-body">
+            <!-- Left: Debate transcript -->
+            <div class="debate-panel">
+                <div class="panel-header">Debate Transcript</div>
+                <div id="debate-transcript" class="transcript"></div>
+                <div id="typing-indicator" class="typing-indicator hidden">
+                    <span id="typing-name"></span> is speaking…
+                </div>
+            </div>
+
+            <!-- Right: Emerging document -->
+            <div class="document-panel">
+                <div class="panel-header">Emerging Document</div>
+                <div id="emerging-document" class="document-content">
+                    <p class="placeholder-text">The working document will appear here as consensus emerges during the debate...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCREEN 3: Results -->
+    <div id="screen-results" class="screen">
+        <header class="results-header">
+            <h1>Convention Concluded</h1>
+            <p id="results-topic" class="convention-topic"></p>
+        </header>
+
+        <div class="results-body">
+            <div class="results-document">
+                <div class="results-toggle">
+                    <button id="btn-view-document" class="btn btn-toggle active">Final Document</button>
+                    <button id="btn-view-transcript" class="btn btn-toggle">Debate Transcript</button>
+                </div>
+                <div id="final-document" class="document-content"></div>
+                <div id="results-transcript" class="document-content hidden"></div>
+            </div>
+
+            <div class="results-actions">
+                <button id="btn-download-transcript" class="btn btn-secondary">Download Transcript</button>
+                <button id="btn-download-document" class="btn btn-secondary">Download Final Document</button>
+                <button id="btn-new-convention" class="btn btn-primary">New Convention</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p id="loading-message">Loading...</p>
+        </div>
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

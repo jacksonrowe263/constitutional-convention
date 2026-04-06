@@ -5,6 +5,7 @@ import glob
 from flask import Flask, request, jsonify, send_from_directory
 from anthropic import Anthropic
 from openai import OpenAI
+from google import genai
 
 app = Flask(__name__, static_folder="public", static_url_path="")
 
@@ -23,9 +24,16 @@ OPENAI_MODELS = {
     "gpt-4.1-nano": "GPT-4.1 Nano",
 }
 
+GOOGLE_MODELS = {
+    "gemini-2.5-flash": "Gemini 2.5 Flash",
+    "gemini-2.5-pro": "Gemini 2.5 Pro",
+    "gemini-2.0-flash": "Gemini 2.0 Flash",
+}
+
 # Cache clients by API key to avoid recreating on every request
 _anthropic_clients = {}
 _openai_clients = {}
+_google_clients = {}
 
 
 def get_anthropic_client(api_key):
@@ -38,6 +46,12 @@ def get_openai_client(api_key):
     if api_key not in _openai_clients:
         _openai_clients[api_key] = OpenAI(api_key=api_key)
     return _openai_clients[api_key]
+
+
+def get_google_client(api_key):
+    if api_key not in _google_clients:
+        _google_clients[api_key] = genai.Client(api_key=api_key)
+    return _google_clients[api_key]
 
 
 def chat_completion(system_prompt, messages, max_tokens, provider_config):
@@ -71,6 +85,26 @@ def chat_completion(system_prompt, messages, max_tokens, provider_config):
             messages=oai_messages,
         )
         return response.choices[0].message.content.strip()
+
+    elif provider == "google":
+        client = get_google_client(api_key)
+        # Google Gemini format: system instruction + contents
+        contents = []
+        for msg in messages:
+            role = "user" if msg["role"] == "user" else "model"
+            contents.append(genai.types.Content(
+                role=role,
+                parts=[genai.types.Part(text=msg["content"])],
+            ))
+        response = client.models.generate_content(
+            model=model,
+            contents=contents,
+            config=genai.types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                max_output_tokens=max_tokens,
+            ),
+        )
+        return response.text.strip()
 
     else:
         raise ValueError(f"Unknown provider: {provider}")
@@ -155,6 +189,7 @@ def get_models():
     return jsonify({
         "anthropic": ANTHROPIC_MODELS,
         "openai": OPENAI_MODELS,
+        "google": GOOGLE_MODELS,
     })
 
 

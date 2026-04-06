@@ -13,7 +13,7 @@ const state = {
     stopRequested: false,
     finalDocument: "",
     activeCategory: "all",
-    models: { anthropic: {}, openai: {} },
+    models: { anthropic: {}, openai: {}, google: {} },
 };
 
 // Delegate color assignment
@@ -88,7 +88,8 @@ function populateModelSelect() {
         .join("");
 
     // Update placeholder hint for api key
-    els.apiKey.placeholder = provider === "anthropic" ? "sk-ant-..." : "sk-...";
+    const placeholders = { anthropic: "sk-ant-...", openai: "sk-...", google: "AIza..." };
+    els.apiKey.placeholder = placeholders[provider] || "API key...";
 }
 
 els.providerSelect.addEventListener("change", populateModelSelect);
@@ -102,6 +103,7 @@ async function loadModels() {
         state.models = {
             anthropic: { "claude-sonnet-4-20250514": "Claude Sonnet 4" },
             openai: { "gpt-4o": "GPT-4o" },
+            google: { "gemini-2.5-flash": "Gemini 2.5 Flash" },
         };
         populateModelSelect();
     }

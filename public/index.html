@@ -53,6 +53,27 @@
                     placeholder="e.g., Draft a framework for governing artificial intelligence"></textarea>
             </section>
 
+            <!-- Step 2b: Reference Document Upload -->
+            <section class="setup-section">
+                <label class="section-label">
+                    <span class="step-number-optional">+</span>
+                    Reference Document <span class="optional-label">(optional)</span>
+                </label>
+                <p class="hint" style="margin-bottom: 0.75rem;">Upload a document for the delegates to evaluate, amend, or discuss alongside the topic. Supports PDF, TXT, and MD files.</p>
+                <div class="document-upload-area" id="doc-upload-area">
+                    <input type="file" id="doc-file-input" accept=".pdf,.txt,.md" class="file-input-hidden">
+                    <div id="doc-upload-prompt" class="upload-prompt">
+                        <span class="upload-icon">&#128196;</span>
+                        <span>Click to upload or drag &amp; drop a file</span>
+                    </div>
+                    <div id="doc-upload-status" class="upload-status hidden">
+                        <span id="doc-filename" class="uploaded-filename"></span>
+                        <span id="doc-char-count" class="char-count"></span>
+                        <button id="btn-remove-doc" class="btn btn-ghost btn-small">Remove</button>
+                    </div>
+                </div>
+            </section>
+
             <!-- Step 3: Delegate Count -->
             <section class="setup-section">
                 <label class="section-label">
@@ -80,7 +101,46 @@
                 <p class="hint">Each round gives every delegate one turn to speak.</p>
             </section>
 
-            <!-- Step 5: Select Delegates -->
+            <!-- Step 5: Create Custom Delegate -->
+            <section class="setup-section">
+                <label class="section-label">
+                    <span class="step-number-optional">+</span>
+                    Create Custom Delegate <span class="optional-label">(optional)</span>
+                </label>
+                <p class="hint" style="margin-bottom: 0.75rem;">Upload source material (biographies, speeches, articles) about a person to create a custom AI delegate.</p>
+                <div class="custom-delegate-form">
+                    <div class="custom-delegate-row">
+                        <div class="custom-delegate-name-field">
+                            <label for="custom-delegate-name" class="field-label">Delegate Name</label>
+                            <input type="text" id="custom-delegate-name" placeholder="e.g., Eleanor Roosevelt" autocomplete="off">
+                        </div>
+                        <div class="custom-delegate-file-field">
+                            <label class="field-label">Source Material</label>
+                            <div class="source-input-tabs">
+                                <button id="btn-source-file" class="btn btn-small source-tab active">Upload File</button>
+                                <button id="btn-source-paste" class="btn btn-small source-tab">Paste Text</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="source-file-area" class="source-area">
+                        <input type="file" id="delegate-source-file" accept=".pdf,.txt,.md" class="file-input-hidden">
+                        <div id="delegate-source-prompt" class="upload-prompt upload-prompt-small">
+                            <span>Click to upload source file (PDF, TXT, MD)</span>
+                        </div>
+                        <div id="delegate-source-status" class="upload-status hidden">
+                            <span id="delegate-source-filename" class="uploaded-filename"></span>
+                            <button id="btn-remove-delegate-source" class="btn btn-ghost btn-small">Remove</button>
+                        </div>
+                    </div>
+                    <div id="source-paste-area" class="source-area hidden">
+                        <textarea id="delegate-source-text" rows="4" placeholder="Paste biography, Wikipedia article, speeches, or other source material here..."></textarea>
+                    </div>
+                    <button id="btn-create-delegate" class="btn btn-secondary" style="margin-top: 0.75rem;">Create Delegate</button>
+                </div>
+                <div id="custom-delegates-list" class="custom-delegates-list"></div>
+            </section>
+
+            <!-- Step 6: Select Delegates -->
             <section class="setup-section">
                 <label class="section-label">
                     <span class="step-number">5</span>

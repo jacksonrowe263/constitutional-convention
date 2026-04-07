@@ -1,11 +1,14 @@
 import os
 import re
+import io
 import json
 import glob
+import uuid
 from flask import Flask, request, jsonify, send_from_directory
 from anthropic import Anthropic
 from openai import OpenAI
 from google import genai
+from pypdf import PdfReader
 
 app = Flask(__name__, static_folder="public", static_url_path="")
 
@@ -164,6 +167,9 @@ def load_all_delegates():
 ALL_DELEGATES = load_all_delegates()
 DELEGATE_MAP = {d["id"]: d for d in ALL_DELEGATES}
 
+# Custom delegates created at runtime (per-session, stored in memory)
+CUSTOM_DELEGATES = []
+
 
 @app.route("/")
 def index():
@@ -172,6 +178,7 @@ def index():
 
 @app.route("/api/delegates")
 def get_delegates():
+    all_dels = ALL_DELEGATES + CUSTOM_DELEGATES
     return jsonify([
         {
             "id": d["id"],
@@ -179,8 +186,9 @@ def get_delegates():
             "bio": d["bio"],
             "leanings": d["leanings"],
             "category": d["category"],
+            "custom": d.get("custom", False),
         }
-        for d in ALL_DELEGATES
+        for d in all_dels
     ])
 
 
@@ -200,9 +208,10 @@ def auto_select():
     count = data.get("count", 5)
     provider_config = get_provider_config(data)
 
+    all_dels = ALL_DELEGATES + CUSTOM_DELEGATES
     delegate_summaries = "\n".join(
         f"- {d['id']}: {d['name']} ({d['category']}) — {d['leanings']}"
-        for d in ALL_DELEGATES
+        for d in all_dels
     )
 
     try:
@@ -225,6 +234,26 @@ def auto_select():
         return jsonify({"error": str(e)}), 500
 
 
+def lookup_delegate(delegate_id):
+    """Look up a delegate by ID from built-in or custom delegates."""
+    if delegate_id in DELEGATE_MAP:
+        return DELEGATE_MAP[delegate_id]
+    for d in CUSTOM_DELEGATES:
+        if d["id"] == delegate_id:
+            return d
+    return None
+
+
+def build_delegate_name_map(delegate_ids):
+    """Build a mapping of delegate IDs to names."""
+    names = {}
+    for did in delegate_ids:
+        d = lookup_delegate(did)
+        if d:
+            names[did] = d["name"]
+    return names
+
+
 @app.route("/api/debate/turn", methods=["POST"])
 def debate_turn():
     data = request.json
@@ -234,13 +263,27 @@ def debate_turn():
     delegate_ids = data.get("all_delegate_ids", [])
     turn_number = data.get("turn_number", 0)
     total_turns = data.get("total_turns", 15)
+    reference_document = data.get("reference_document", "")
     provider_config = get_provider_config(data)
 
-    if delegate_id not in DELEGATE_MAP:
+    delegate = lookup_delegate(delegate_id)
+    if not delegate:
         return jsonify({"error": f"Unknown delegate: {delegate_id}"}), 400
 
-    delegate = DELEGATE_MAP[delegate_id]
-    delegate_names = {did: DELEGATE_MAP[did]["name"] for did in delegate_ids if did in DELEGATE_MAP}
+    delegate_names = build_delegate_name_map(delegate_ids)
+
+    # Build reference document context if provided
+    doc_context = ""
+    if reference_document:
+        doc_context = f"""
+
+REFERENCE DOCUMENT:
+The convention has been provided with the following document for evaluation and discussion:
+---
+{reference_document[:15000]}
+---
+You should reference specific parts of this document in your arguments where relevant.
+"""
 
     system_prompt = f"""{delegate['full_content']}
 
@@ -248,7 +291,7 @@ def debate_turn():
 CONVENTION CONTEXT:
 You are participating in a constitutional convention. The topic under deliberation is:
 "{prompt}"
-
+{doc_context}
 Other delegates present: {', '.join(delegate_names[did] for did in delegate_ids if did != delegate_id)}
 
 This is turn {turn_number + 1} of approximately {total_turns} total turns in the debate.
@@ -293,14 +336,19 @@ def generate_document():
     prompt = data.get("prompt", "")
     history = data.get("history", [])
     delegate_ids = data.get("all_delegate_ids", [])
+    reference_document = data.get("reference_document", "")
     provider_config = get_provider_config(data)
 
-    delegate_names = {did: DELEGATE_MAP[did]["name"] for did in delegate_ids if did in DELEGATE_MAP}
+    delegate_names = build_delegate_name_map(delegate_ids)
 
     transcript = "\n\n".join(
         f"**{delegate_names.get(e['delegate_id'], e['delegate_id'])}:** {e['text']}"
         for e in history
     )
+
+    doc_context = ""
+    if reference_document:
+        doc_context = f"\n\nREFERENCE DOCUMENT PROVIDED TO THE CONVENTION:\n---\n{reference_document[:15000]}\n---\n"
 
     system_prompt = """You are a skilled constitutional drafter and political scribe. Your task is to synthesize a deliberative debate into a formal document.
 
@@ -320,7 +368,7 @@ Write in a formal, dignified tone appropriate for a constitutional or legislativ
             system_prompt=system_prompt,
             messages=[{
                 "role": "user",
-                "content": f"Topic of the convention: {prompt}\n\nFull debate transcript:\n\n{transcript}\n\nNow produce the final document."
+                "content": f"Topic of the convention: {prompt}\n{doc_context}\nFull debate transcript:\n\n{transcript}\n\nNow produce the final document."
             }],
             max_tokens=4096,
             provider_config=provider_config,
@@ -336,14 +384,19 @@ def progress_document():
     prompt = data.get("prompt", "")
     history = data.get("history", [])
     delegate_ids = data.get("all_delegate_ids", [])
+    reference_document = data.get("reference_document", "")
     provider_config = get_provider_config(data)
 
-    delegate_names = {did: DELEGATE_MAP[did]["name"] for did in delegate_ids if did in DELEGATE_MAP}
+    delegate_names = build_delegate_name_map(delegate_ids)
 
     transcript = "\n\n".join(
         f"**{delegate_names.get(e['delegate_id'], e['delegate_id'])}:** {e['text']}"
         for e in history
     )
+
+    doc_context = ""
+    if reference_document:
+        doc_context = f"\n\nReference document provided:\n---\n{reference_document[:10000]}\n---\n"
 
     system_prompt = """You are a convention clerk taking notes and drafting an emerging document based on the debate so far.
 
@@ -361,12 +414,133 @@ Keep it concise — this is a progress snapshot, not the final document. Use 200
             system_prompt=system_prompt,
             messages=[{
                 "role": "user",
-                "content": f"Topic: {prompt}\n\nDebate so far:\n\n{transcript}"
+                "content": f"Topic: {prompt}\n{doc_context}\nDebate so far:\n\n{transcript}"
             }],
             max_tokens=1024,
             provider_config=provider_config,
         )
         return jsonify({"document": text})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/upload-document", methods=["POST"])
+def upload_document():
+    """Extract text from an uploaded file (PDF, TXT, MD)."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files["file"]
+    filename = file.filename.lower()
+
+    try:
+        if filename.endswith(".pdf"):
+            reader = PdfReader(io.BytesIO(file.read()))
+            text = "\n\n".join(page.extract_text() or "" for page in reader.pages)
+        elif filename.endswith((".txt", ".md")):
+            text = file.read().decode("utf-8")
+        else:
+            return jsonify({"error": "Unsupported file type. Please upload PDF, TXT, or MD files."}), 400
+
+        return jsonify({"text": text.strip(), "filename": file.filename})
+    except Exception as e:
+        return jsonify({"error": f"Failed to read file: {str(e)}"}), 500
+
+
+@app.route("/api/create-delegate", methods=["POST"])
+def create_delegate():
+    """Create a custom delegate from source material using AI."""
+    data = request.json
+    name = data.get("name", "").strip()
+    source_text = data.get("source_text", "").strip()
+    provider_config = get_provider_config(data)
+
+    if not name:
+        return jsonify({"error": "Delegate name is required"}), 400
+    if not source_text:
+        return jsonify({"error": "Source material is required"}), 400
+
+    # Use AI to generate a delegate persona in the same format as existing delegates
+    system_prompt = """You are an expert at creating detailed AI persona profiles for historical and intellectual figures.
+
+Given source material about a person, create a comprehensive persona profile in EXACTLY this markdown format:
+
+# Agent Persona Profiling Script: [Full Name]
+
+## 1. System Prompt / Persona Identity
+**Identity:** You are [Full Name] ([birth-death years if applicable]), [brief description of who they are and what they're known for].
+**Core Instruction:** NEVER BREAK CHARACTER. [2-3 sentences about how they approach debates and what drives them.]
+
+## 2. Core Philosophy & Worldview
+* **[Key Belief 1]:** [Detailed explanation]
+* **[Key Belief 2]:** [Detailed explanation]
+* **[Key Belief 3]:** [Detailed explanation]
+
+## 3. Role in a Constitutional Convention
+* [How they would contribute to debates]
+* [What unique perspective they bring]
+* [How they interact with opposing views]
+
+## 4. Key Political and Economic Stances
+* **View on [Topic 1]:** [Their position]
+* **View on [Topic 2]:** [Their position]
+* **View on [Topic 3]:** [Their position]
+
+## 5. Communication Style & Tone
+* **Tone:** [Description of how they speak]
+* **Technique:** [How they argue and persuade]
+* **Vocabulary:** [Characteristic phrases and terms they use]
+
+## 6. Detailed Sources & Citations
+* [Key works, writings, speeches they draw from]
+
+Make the persona vivid, detailed, and faithful to the actual views and style of the person. The profile should allow an AI to authentically roleplay this person in a constitutional debate."""
+
+    try:
+        persona_content = chat_completion(
+            system_prompt=system_prompt,
+            messages=[{
+                "role": "user",
+                "content": f"Create a detailed delegate persona profile for: {name}\n\nSource material:\n{source_text[:12000]}"
+            }],
+            max_tokens=4096,
+            provider_config=provider_config,
+        )
+
+        # Parse the generated content to extract bio and leanings
+        delegate_id = f"custom_{uuid.uuid4().hex[:8]}"
+
+        identity_match = re.search(r"\*\*Identity:\*\*\s*(.+?)(?:\n|$)", persona_content)
+        bio = identity_match.group(1).strip() if identity_match else f"Custom delegate: {name}"
+        display_bio = re.sub(r"^You are\s+", "", bio)
+
+        philosophy_section = ""
+        phil_match = re.search(r"## 2\. Core Philosophy.*?\n(.*?)(?=## 3\.)", persona_content, re.DOTALL)
+        if phil_match:
+            bullets = re.findall(r"\*\*\s*(.+?)\s*(?::\*\*|\*\*:)", phil_match.group(1))
+            philosophy_section = "; ".join(bullets)
+
+        delegate = {
+            "id": delegate_id,
+            "name": name,
+            "bio": display_bio,
+            "leanings": philosophy_section,
+            "category": "Custom",
+            "full_content": persona_content,
+            "custom": True,
+        }
+
+        CUSTOM_DELEGATES.append(delegate)
+        DELEGATE_MAP[delegate_id] = delegate
+
+        return jsonify({
+            "id": delegate_id,
+            "name": name,
+            "bio": display_bio,
+            "leanings": philosophy_section,
+            "category": "Custom",
+            "custom": True,
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

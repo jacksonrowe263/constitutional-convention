@@ -8,12 +8,14 @@ const state = {
     delegateCount: 5,
     debateRounds: 3,
     prompt: "",
+    referenceDocument: "",  // uploaded document text
     history: [],        // {delegate_id, name, text}
     conventionRunning: false,
     stopRequested: false,
     finalDocument: "",
     activeCategory: "all",
     models: { anthropic: {}, openai: {}, google: {} },
+    delegateSourceText: "",  // source text for custom delegate creation
 };
 
 // Delegate color assignment
@@ -68,6 +70,28 @@ const els = {
     btnNewConvention: $("#btn-new-convention"),
     loadingOverlay: $("#loading-overlay"),
     loadingMessage: $("#loading-message"),
+    // Document upload
+    docUploadArea: $("#doc-upload-area"),
+    docFileInput: $("#doc-file-input"),
+    docUploadPrompt: $("#doc-upload-prompt"),
+    docUploadStatus: $("#doc-upload-status"),
+    docFilename: $("#doc-filename"),
+    docCharCount: $("#doc-char-count"),
+    btnRemoveDoc: $("#btn-remove-doc"),
+    // Custom delegate
+    customDelegateName: $("#custom-delegate-name"),
+    btnSourceFile: $("#btn-source-file"),
+    btnSourcePaste: $("#btn-source-paste"),
+    sourceFileArea: $("#source-file-area"),
+    sourcePasteArea: $("#source-paste-area"),
+    delegateSourceFile: $("#delegate-source-file"),
+    delegateSourcePrompt: $("#delegate-source-prompt"),
+    delegateSourceStatus: $("#delegate-source-status"),
+    delegateSourceFilename: $("#delegate-source-filename"),
+    btnRemoveDelegateSource: $("#btn-remove-delegate-source"),
+    delegateSourceText: $("#delegate-source-text"),
+    btnCreateDelegate: $("#btn-create-delegate"),
+    customDelegatesList: $("#custom-delegates-list"),
 };
 
 // ---- Provider / Model management ----
@@ -127,17 +151,32 @@ function hideLoading() {
 
 // ---- API helpers ----
 
-async function api(endpoint, data) {
-    const res = await fetch(`/api${endpoint}`, {
-        method: data ? "POST" : "GET",
-        headers: data ? { "Content-Type": "application/json" } : {},
-        body: data ? JSON.stringify(data) : undefined,
-    });
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error || "API request failed");
+async function api(endpoint, data, retries = 2) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const res = await fetch(`/api${endpoint}`, {
+                method: data ? "POST" : "GET",
+                headers: data ? { "Content-Type": "application/json" } : {},
+                body: data ? JSON.stringify(data) : undefined,
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                const msg = err.error || `HTTP ${res.status}: ${res.statusText}`;
+                if (attempt < retries && (res.status >= 500 || res.status === 429)) {
+                    await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+                    continue;
+                }
+                throw new Error(msg);
+            }
+            return res.json();
+        } catch (e) {
+            if (attempt < retries && !e.message.startsWith("HTTP")) {
+                await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+                continue;
+            }
+            throw e;
+        }
     }
-    return res.json();
 }
 
 // Helper: inject provider config into POST data
@@ -189,9 +228,10 @@ function renderDelegateGrid() {
             const selected = state.selectedIds.has(d.id);
             const atMax = state.selectedIds.size >= state.delegateCount && !selected;
             return `
-                <div class="delegate-card ${selected ? "selected" : ""} ${atMax ? "disabled" : ""}"
+                <div class="delegate-card ${selected ? "selected" : ""} ${atMax ? "disabled" : ""} ${d.custom ? "custom-card" : ""}"
                      data-id="${d.id}">
                     <div class="check-mark">&#10003;</div>
+                    ${d.custom ? '<div class="custom-badge">Custom</div>' : ""}
                     <div class="card-name">${d.name}</div>
                     <div class="card-category">${d.category}</div>
                     <div class="card-bio">${d.bio}</div>
@@ -407,6 +447,7 @@ async function startConvention() {
                     all_delegate_ids: delegateIds,
                     turn_number: turnNumber,
                     total_turns: totalTurns,
+                    reference_document: state.referenceDocument,
                 }));
 
                 state.history.push({
@@ -449,6 +490,7 @@ async function startConvention() {
             prompt: state.prompt,
             history: state.history,
             all_delegate_ids: delegateIds,
+            reference_document: state.referenceDocument,
         }));
         state.finalDocument = result.document;
     } catch (e) {
@@ -509,6 +551,7 @@ async function updateEmergingDocument() {
             prompt: state.prompt,
             history: state.history,
             all_delegate_ids: Array.from(state.selectedIds),
+            reference_document: state.referenceDocument,
         }));
         els.emergingDocument.innerHTML = mdToHtml(result.document);
     } catch (e) {
@@ -579,6 +622,185 @@ function downloadFile(filename, content) {
 
 els.btnNewConvention.addEventListener("click", () => {
     showScreen("setup");
+});
+
+// ---- Reference Document Upload ----
+
+async function uploadFile(fileInput) {
+    const file = fileInput.files[0];
+    if (!file) return null;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const res = await fetch("/api/upload-document", {
+        method: "POST",
+        body: formData,
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Upload failed");
+    }
+    return res.json();
+}
+
+els.docUploadArea.addEventListener("click", (e) => {
+    if (e.target.closest("#btn-remove-doc")) return;
+    if (!state.referenceDocument) els.docFileInput.click();
+});
+
+els.docUploadArea.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    els.docUploadArea.classList.add("has-file");
+});
+
+els.docUploadArea.addEventListener("dragleave", () => {
+    if (!state.referenceDocument) els.docUploadArea.classList.remove("has-file");
+});
+
+els.docUploadArea.addEventListener("drop", (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files.length) {
+        els.docFileInput.files = e.dataTransfer.files;
+        handleDocUpload();
+    }
+});
+
+els.docFileInput.addEventListener("change", handleDocUpload);
+
+async function handleDocUpload() {
+    const file = els.docFileInput.files[0];
+    if (!file) return;
+
+    showLoading("Extracting text from document...");
+    try {
+        const result = await uploadFile(els.docFileInput);
+        state.referenceDocument = result.text;
+        els.docFilename.textContent = result.filename;
+        els.docCharCount.textContent = `(${result.text.length.toLocaleString()} characters)`;
+        els.docUploadPrompt.classList.add("hidden");
+        els.docUploadStatus.classList.remove("hidden");
+        els.docUploadArea.classList.add("has-file");
+    } catch (e) {
+        alert("Failed to upload document: " + e.message);
+        els.docUploadArea.classList.remove("has-file");
+    } finally {
+        hideLoading();
+    }
+}
+
+els.btnRemoveDoc.addEventListener("click", (e) => {
+    e.stopPropagation();
+    state.referenceDocument = "";
+    els.docFileInput.value = "";
+    els.docUploadPrompt.classList.remove("hidden");
+    els.docUploadStatus.classList.add("hidden");
+    els.docUploadArea.classList.remove("has-file");
+});
+
+// ---- Custom Delegate Creation ----
+
+// Source input tabs
+els.btnSourceFile.addEventListener("click", () => {
+    els.btnSourceFile.classList.add("active");
+    els.btnSourcePaste.classList.remove("active");
+    els.sourceFileArea.classList.remove("hidden");
+    els.sourcePasteArea.classList.add("hidden");
+});
+
+els.btnSourcePaste.addEventListener("click", () => {
+    els.btnSourcePaste.classList.add("active");
+    els.btnSourceFile.classList.remove("active");
+    els.sourcePasteArea.classList.remove("hidden");
+    els.sourceFileArea.classList.add("hidden");
+});
+
+// Delegate source file upload
+els.delegateSourcePrompt.addEventListener("click", () => els.delegateSourceFile.click());
+
+els.delegateSourceFile.addEventListener("change", async () => {
+    const file = els.delegateSourceFile.files[0];
+    if (!file) return;
+
+    showLoading("Reading source file...");
+    try {
+        const result = await uploadFile(els.delegateSourceFile);
+        state.delegateSourceText = result.text;
+        els.delegateSourceFilename.textContent = result.filename;
+        els.delegateSourcePrompt.classList.add("hidden");
+        els.delegateSourceStatus.classList.remove("hidden");
+    } catch (e) {
+        alert("Failed to read file: " + e.message);
+    } finally {
+        hideLoading();
+    }
+});
+
+els.btnRemoveDelegateSource.addEventListener("click", () => {
+    state.delegateSourceText = "";
+    els.delegateSourceFile.value = "";
+    els.delegateSourcePrompt.classList.remove("hidden");
+    els.delegateSourceStatus.classList.add("hidden");
+});
+
+// Create delegate button
+els.btnCreateDelegate.addEventListener("click", async () => {
+    const name = els.customDelegateName.value.trim();
+    const isPasteMode = els.btnSourcePaste.classList.contains("active");
+    const sourceText = isPasteMode
+        ? els.delegateSourceText.value.trim()
+        : state.delegateSourceText;
+
+    if (!name) {
+        alert("Please enter a name for the delegate.");
+        return;
+    }
+    if (!sourceText) {
+        alert("Please provide source material (upload a file or paste text).");
+        return;
+    }
+    if (!els.apiKey.value.trim()) {
+        alert("Please enter your API key first (Step 1) — it's needed to generate the delegate persona.");
+        return;
+    }
+
+    showLoading(`Creating delegate persona for ${name}...`);
+    try {
+        const result = await api("/create-delegate", withProvider({
+            name,
+            source_text: sourceText,
+        }));
+
+        // Add to local delegates list and refresh grid
+        state.delegates.push(result);
+
+        // Show in custom delegates list
+        const chip = document.createElement("div");
+        chip.className = "custom-delegate-chip";
+        chip.innerHTML = `
+            <span class="chip-name">${result.name}</span>
+            <span class="chip-bio">${result.bio}</span>
+        `;
+        els.customDelegatesList.appendChild(chip);
+
+        // Reset the form
+        els.customDelegateName.value = "";
+        els.delegateSourceText.value = "";
+        state.delegateSourceText = "";
+        els.delegateSourceFile.value = "";
+        els.delegateSourcePrompt.classList.remove("hidden");
+        els.delegateSourceStatus.classList.add("hidden");
+
+        // Refresh the delegate grid to include the new delegate
+        renderCategoryFilters();
+        renderDelegateGrid();
+
+        alert(`Delegate "${name}" created successfully! You can now select them in the delegate grid.`);
+    } catch (e) {
+        alert("Failed to create delegate: " + e.message);
+    } finally {
+        hideLoading();
+    }
 });
 
 // ---- Init ----

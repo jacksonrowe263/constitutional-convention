@@ -4,6 +4,8 @@ import io
 import json
 import glob
 import uuid
+import logging
+import traceback
 from flask import Flask, request, jsonify, send_from_directory
 from anthropic import Anthropic
 from openai import OpenAI
@@ -11,6 +13,22 @@ from google import genai
 from pypdf import PdfReader
 
 app = Flask(__name__, static_folder="public", static_url_path="")
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    logger.error(f"Internal server error: {e}\n{traceback.format_exc()}")
+    return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logger.error(f"Unhandled exception: {e}\n{traceback.format_exc()}")
+    return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 DELEGATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Delegate_data")
 
@@ -543,6 +561,11 @@ Make the persona vivid, detailed, and faithful to the actual views and style of 
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+def create_app():
+    """App factory for gunicorn."""
+    return app
 
 
 if __name__ == "__main__":

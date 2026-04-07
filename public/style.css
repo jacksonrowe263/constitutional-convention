@@ -498,6 +498,7 @@ textarea:focus {
     border-top: 1px solid var(--border);
     background: var(--bg);
 }
+.hidden { display: none !important; }
 .typing-indicator.hidden { display: none; }
 
 /* ---- Results Screen ---- */

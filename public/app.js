@@ -231,11 +231,9 @@ $("#count-minus").addEventListener("click", () => {
 });
 
 $("#count-plus").addEventListener("click", () => {
-    if (state.delegateCount < 12) {
-        state.delegateCount++;
-        els.delegateCount.textContent = state.delegateCount;
-        updateSelectionUI();
-    }
+    state.delegateCount++;
+    els.delegateCount.textContent = state.delegateCount;
+    updateSelectionUI();
 });
 
 // ---- Debate rounds controls ----

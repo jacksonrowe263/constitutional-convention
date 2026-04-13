@@ -140,6 +140,69 @@ def get_provider_config(data):
     }
 
 
+SHORT_BIOS = {
+    # Economists
+    "adam_smith": "Scottish economist and moral philosopher, known as the Father of Capitalism.",
+    "david_ricardo": "Wealthy British political economist, stockbroker, and Member of Parliament.",
+    "elinor_ostrom": "American political economist and first woman to win the Nobel Prize in Economics.",
+    "friedrich_hayek": "Nobel Prize-winning Austrian-British economist and philosopher.",
+    "john_maynard_keynes": "British economist who revolutionized macroeconomics during the Great Depression.",
+    "milton_friedman": "Nobel Prize-winning American economist and leader of the Chicago School.",
+    "thomas_sowell": "Prolific American economist, social theorist, and Chicago School intellectual.",
+    # Founding Fathers
+    "alexander_hamilton": "First Secretary of the Treasury and champion of a strong federal government.",
+    "benjamin_franklin": "American polymath, scientist, diplomat, publisher, and elder statesman.",
+    "george_washington": "Commander-in-Chief of the Continental Army and first President of the United States.",
+    "james_madison": "Father of the Constitution and principal author of the Bill of Rights.",
+    "john_adams": "Leading Founding Father, diplomat, and second President of the United States.",
+    "thomas_jefferson": "Author of the Declaration of Independence and third President of the United States.",
+    # Futurists
+    "isaac_asimov": "Prolific American author, biochemist, and grandfather of modern science fiction.",
+    # Jurists
+    "antonin_scalia": "Combative Supreme Court Justice who championed Originalism and Textualism.",
+    "clarence_thomas": "Supreme Court Justice known as the most staunch originalist on the modern court.",
+    "earl_warren": "14th Chief Justice who presided over one of the most transformative Supreme Courts.",
+    "john_jay": "Founding Father, co-author of The Federalist Papers, and first Chief Justice.",
+    "john_marshall": "Fourth Chief Justice, widely considered the most influential jurist in American history.",
+    "louis_brandeis": "Pioneering Supreme Court Justice known as The People's Lawyer.",
+    "oliver_wendell_holmes_jr": "Civil War veteran and one of the most influential American jurists of the 20th century.",
+    "ruth_bader_ginsburg": "Pioneering feminist litigator and Supreme Court Justice, the Notorious R.B.G.",
+    # Philosophers
+    "aristotle": "Ancient Greek philosopher, polymath, and founder of the Lyceum.",
+    "buddha": "The Awakened One, founder of Buddhism and teacher of the Middle Way.",
+    "confucius": "Ancient Chinese philosopher and founder of Confucianism.",
+    "edmund_burke": "Irish statesman and foundational philosopher of modern conservatism.",
+    "frantz_fanon": "Martinican psychiatrist, philosopher, and anti-colonial revolutionary.",
+    "friedrich_nietzsche": "Provocative German philosopher, cultural critic, and philologist.",
+    "immanuel_kant": "Central figure in modern philosophy, known for deontological ethics.",
+    "jean_jacques_rousseau": "Genevan philosopher whose radical ideas helped inspire the French Revolution.",
+    "john_locke": "The Father of Liberalism, foundational Enlightenment philosopher.",
+    "john_rawls": "Preeminent American political philosopher who revived the social contract tradition.",
+    "john_stuart_mill": "Brilliant British philosopher, political economist, and champion of utilitarianism.",
+    "karl_marx": "Revolutionary German philosopher, economist, and author of Das Kapital.",
+    "martha_nussbaum": "Prominent contemporary philosopher specializing in political philosophy and ethics.",
+    "mary_wollstonecraft": "Pioneering English writer and founding mother of modern Western feminism.",
+    "niccolo_machiavelli": "Florentine diplomat and father of modern political realism.",
+    "plato": "Ancient Athenian philosopher, founder of the Academy, and student of Socrates.",
+    "simone_de_beauvoir": "Influential French existentialist philosopher, feminist theorist, and author.",
+    "socrates": "Foundational figure of Western moral philosophy.",
+    "soren_kierkegaard": "Danish philosopher and theologian, widely considered the father of existentialism.",
+    "thomas_hobbes": "English philosopher best known for his masterpiece, Leviathan.",
+    "vine_deloria_jr": "Standing Rock Sioux author and activist who reshaped understanding of Native American history.",
+    # Political Leaders and Reformers
+    "abraham_lincoln": "16th President who led the nation through the Civil War and abolished slavery.",
+    "barry_goldwater": "Arizona Senator and intellectual father of the modern American conservative movement.",
+    "franklin_roosevelt": "32nd President who led America through the Great Depression and World War II.",
+    "frederick_douglass": "Formerly enslaved abolitionist, orator, and most prominent Black American of his era.",
+    "john_f_kennedy": "35th President, representing the idealism and challenges of the mid-20th century.",
+    "lyndon_b_johnson": "36th President, Master of the Senate, and architect of the Great Society.",
+    "martin_luther_king_jr": "Baptist minister and leader of the civil rights movement.",
+    "ronald_reagan": "40th President, the Great Communicator, and architect of modern conservative politics.",
+    "susan_b_anthony": "Fierce American social reformer, abolitionist, and champion of women's suffrage.",
+    "theodore_roosevelt": "26th President, driving force of the Progressive Era, explorer, and naturalist.",
+}
+
+
 def parse_delegate_file(filepath):
     """Parse a delegate .md file into structured data."""
     with open(filepath, "r", encoding="utf-8") as f:
@@ -148,31 +211,15 @@ def parse_delegate_file(filepath):
     name_match = re.search(r"#\s*Agent Persona Profiling Script:\s*(.+)", content)
     name = name_match.group(1).strip() if name_match else os.path.splitext(os.path.basename(filepath))[0].replace("_", " ").title()
 
-    identity_match = re.search(r"\*\*Identity:\*\*\s*(.+?)(?:\n|$)", content)
-    bio = identity_match.group(1).strip() if identity_match else ""
-    display_bio = re.sub(r"^You are\s+", "", bio)
-    # Truncate bio to first natural clause for concise card display
-    # Cut at first comma after the name/dates, or first period
-    short_bio = display_bio
-    # Try to find closing paren after dates, then take the descriptor after it
-    paren_match = re.match(r"^(.+?\([^)]+\)),?\s*(.+)", short_bio)
-    if paren_match:
-        # e.g. "James Madison (1751-1836), the brilliant political theorist known as..."
-        name_part = paren_match.group(1)
-        rest = paren_match.group(2)
-        # Take rest up to first period or second comma
-        rest_short = re.split(r"\.|,\s*(?:and|who|the principal)", rest)[0].strip()
-        # Cap the rest portion
-        if len(rest_short) > 80:
-            rest_short = rest_short[:77].rsplit(" ", 1)[0]
-        short_bio = f"{name_part}, {rest_short}"
-    elif len(short_bio) > 120:
-        short_bio = re.split(r"\.\s", short_bio)[0]
-        if len(short_bio) > 120:
-            short_bio = short_bio[:117].rsplit(" ", 1)[0]
-    # Remove any trailing punctuation artifacts
-    short_bio = short_bio.rstrip(" ,;")
-    display_bio = short_bio
+    delegate_id = os.path.splitext(os.path.basename(filepath))[0]
+    display_bio = SHORT_BIOS.get(delegate_id, "")
+    if not display_bio:
+        # Fallback for delegates not in the lookup (e.g. future additions)
+        identity_match = re.search(r"\*\*Identity:\*\*\s*(.+?)(?:\n|$)", content)
+        bio = identity_match.group(1).strip() if identity_match else ""
+        display_bio = re.sub(r"^You are\s+", "", bio)
+        if len(display_bio) > 120:
+            display_bio = display_bio[:117].rsplit(" ", 1)[0] + "."
 
     philosophy_section = ""
     phil_match = re.search(r"## 2\. Core Philosophy.*?\n(.*?)(?=## 3\.)", content, re.DOTALL)

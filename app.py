@@ -272,6 +272,123 @@ def build_delegate_name_map(delegate_ids):
     return names
 
 
+# Rough estimate: 1 token ≈ 4 characters
+MAX_INPUT_CHARS = 120000  # ~30k tokens, leaves room for system prompt + output
+
+
+def condense_transcript(history, delegate_names, max_chars=MAX_INPUT_CHARS):
+    """If the full transcript exceeds max_chars, summarize early turns and keep recent ones verbatim.
+
+    Returns a string combining a summary block (if needed) and the recent verbatim turns.
+    """
+    # Build the full transcript
+    full_entries = []
+    for e in history:
+        name = delegate_names.get(e["delegate_id"], e["delegate_id"])
+        full_entries.append(f"**{name}:** {e['text']}")
+
+    full_text = "\n\n".join(full_entries)
+    if len(full_text) <= max_chars:
+        return full_text
+
+    # Need to split: keep recent turns verbatim, summarize earlier ones
+    # Work backwards to find how many recent turns fit in ~60% of budget
+    recent_budget = int(max_chars * 0.6)
+    recent_entries = []
+    recent_len = 0
+    for entry_text in reversed(full_entries):
+        if recent_len + len(entry_text) + 2 > recent_budget:
+            break
+        recent_entries.insert(0, entry_text)
+        recent_len += len(entry_text) + 2
+
+    # Summarize the earlier turns that didn't fit
+    split_idx = len(full_entries) - len(recent_entries)
+    early_entries = full_entries[:split_idx]
+
+    # Build a condensed summary of early entries — extract key points per speaker
+    summary_lines = []
+    speaker_points = {}
+    for entry_text in early_entries:
+        # Parse "**Name:** text"
+        match = re.match(r"\*\*(.+?):\*\*\s*(.*)", entry_text, re.DOTALL)
+        if match:
+            name, text = match.group(1), match.group(2)
+            if name not in speaker_points:
+                speaker_points[name] = []
+            # Take first 200 chars of each turn as a summary
+            speaker_points[name].append(text[:200].strip() + ("..." if len(text) > 200 else ""))
+
+    for name, points in speaker_points.items():
+        summary_lines.append(f"**{name}** argued: " + " | ".join(points))
+
+    summary_text = "\n".join(summary_lines)
+    # Trim summary if still too long
+    summary_budget = max_chars - recent_len - 200
+    if len(summary_text) > summary_budget:
+        summary_text = summary_text[:summary_budget] + "\n[...earlier arguments truncated...]"
+
+    recent_text = "\n\n".join(recent_entries)
+
+    return (
+        f"=== SUMMARY OF EARLIER DEBATE (turns 1-{split_idx}) ===\n"
+        f"{summary_text}\n\n"
+        f"=== RECENT DEBATE (turns {split_idx + 1}-{len(full_entries)}) ===\n"
+        f"{recent_text}"
+    )
+
+
+def condense_history_messages(history, delegate_names, max_chars=MAX_INPUT_CHARS):
+    """For debate turns: condense the message list if it's too long.
+
+    Returns a list of message dicts for the chat API.
+    """
+    # Build full messages and measure total size
+    full_messages = []
+    total_len = 0
+    for entry in history:
+        speaker = delegate_names.get(entry["delegate_id"], entry["delegate_id"])
+        content = f"[{speaker}]: {entry['text']}"
+        full_messages.append({"role": "user", "content": content})
+        total_len += len(content)
+
+    if total_len <= max_chars:
+        return full_messages
+
+    # Keep recent messages verbatim, summarize earlier ones into a single message
+    recent_budget = int(max_chars * 0.6)
+    recent_messages = []
+    recent_len = 0
+    for msg in reversed(full_messages):
+        if recent_len + len(msg["content"]) + 2 > recent_budget:
+            break
+        recent_messages.insert(0, msg)
+        recent_len += len(msg["content"]) + 2
+
+    split_idx = len(full_messages) - len(recent_messages)
+    early_messages = full_messages[:split_idx]
+
+    # Condense early messages into a summary
+    summary_parts = []
+    for msg in early_messages:
+        text = msg["content"]
+        # Truncate each entry
+        if len(text) > 250:
+            text = text[:250] + "..."
+        summary_parts.append(text)
+
+    summary = (
+        f"[SUMMARY OF EARLIER DEBATE - turns 1 through {split_idx}]\n"
+        + "\n".join(summary_parts)
+    )
+    # Trim if needed
+    summary_budget = max_chars - recent_len - 200
+    if len(summary) > summary_budget:
+        summary = summary[:summary_budget] + "\n[...truncated...]"
+
+    return [{"role": "user", "content": summary}] + recent_messages
+
+
 @app.route("/api/debate/turn", methods=["POST"])
 def debate_turn():
     data = request.json
@@ -324,13 +441,7 @@ INSTRUCTIONS:
 - {"As this is one of the final turns, begin working toward areas of potential compromise or agreement where possible, while still staying true to your principles." if turn_number >= total_turns - 4 else ""}
 """
 
-    messages = []
-    for entry in history:
-        speaker = delegate_names.get(entry["delegate_id"], entry["delegate_id"])
-        messages.append({
-            "role": "user",
-            "content": f"[{speaker}]: {entry['text']}"
-        })
+    messages = condense_history_messages(history, delegate_names)
     messages.append({
         "role": "user",
         "content": f"It is now your turn to speak, {delegate['name']}. Address the convention on the topic and respond to any points raised by other delegates."
@@ -359,10 +470,7 @@ def generate_document():
 
     delegate_names = build_delegate_name_map(delegate_ids)
 
-    transcript = "\n\n".join(
-        f"**{delegate_names.get(e['delegate_id'], e['delegate_id'])}:** {e['text']}"
-        for e in history
-    )
+    transcript = condense_transcript(history, delegate_names)
 
     doc_context = ""
     if reference_document:
@@ -407,10 +515,7 @@ def progress_document():
 
     delegate_names = build_delegate_name_map(delegate_ids)
 
-    transcript = "\n\n".join(
-        f"**{delegate_names.get(e['delegate_id'], e['delegate_id'])}:** {e['text']}"
-        for e in history
-    )
+    transcript = condense_transcript(history, delegate_names)
 
     doc_context = ""
     if reference_document:

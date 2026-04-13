@@ -531,8 +531,11 @@ function appendDebateEntry(delegateId, name, text) {
         <div class="speaker-name" style="color: ${color}">${name}</div>
         <div class="bubble" style="border-left-color: ${color}">${mdToHtml(text)}</div>
     `;
-    els.transcript.appendChild(entry);
-    els.transcript.scrollTop = els.transcript.scrollHeight;
+    // Only auto-scroll if user is near the bottom (not reading earlier entries)
+    const el = els.transcript;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    el.appendChild(entry);
+    if (nearBottom) el.scrollTop = el.scrollHeight;
 }
 
 function appendSystemMessage(text) {

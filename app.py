@@ -458,6 +458,40 @@ def condense_history_messages(history, delegate_names, max_chars=MAX_INPUT_CHARS
     return [{"role": "user", "content": summary}] + recent_messages
 
 
+def ensure_complete_sentence(text):
+    """If text was cut off mid-sentence by the token limit, end it cleanly.
+
+    Looks for a final sentence-ending punctuation (.!?") and either
+    truncates to that point or appends an em dash to indicate interruption.
+    """
+    text = text.strip()
+    if not text:
+        return text
+    # Already ends with sentence-ending punctuation — all good
+    if text[-1] in '.!?""\u201d':
+        return text
+    # Check if the last char is a closing quote/paren after punctuation
+    if len(text) >= 2 and text[-2] in '.!?' and text[-1] in ')\u201d"\'':
+        return text
+    # Find the last sentence-ending punctuation
+    last_period = -1
+    for i in range(len(text) - 1, -1, -1):
+        if text[i] in '.!?':
+            # Make sure it's not an abbreviation (e.g. "Dr." or "U.S.")
+            # Simple heuristic: if followed by a space and uppercase, it's a sentence end
+            if i == len(text) - 1 or (i + 1 < len(text) and text[i + 1] in ' \n""\u201d'):
+                last_period = i
+                break
+    if last_period > len(text) * 0.7:
+        # The last complete sentence is reasonably close to the end — truncate there
+        return text[:last_period + 1]
+    else:
+        # The cutoff happened too far from any sentence end — append em dash
+        # Trim trailing whitespace and partial words
+        trimmed = text.rstrip()
+        return trimmed + "\u2014"
+
+
 @app.route("/api/debate/turn", methods=["POST"])
 def debate_turn():
     data = request.json
@@ -520,9 +554,10 @@ INSTRUCTIONS:
         text = chat_completion(
             system_prompt=system_prompt,
             messages=messages,
-            max_tokens=1024,
+            max_tokens=2048,
             provider_config=provider_config,
         )
+        text = ensure_complete_sentence(text)
         return jsonify({"text": text, "delegate_id": delegate_id, "name": delegate["name"]})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -556,6 +591,8 @@ Produce a formal document (a resolution, constitution, framework, or set of prin
 4. Note where compromises were reached and what the competing views were
 5. Include a dissent or minority opinion section if there were fundamental disagreements
 
+IMPORTANT: Keep the document under 2000 words. Be thorough but concise. Every sentence must be complete.
+
 Write in a formal, dignified tone appropriate for a constitutional or legislative document."""
 
     try:
@@ -563,11 +600,12 @@ Write in a formal, dignified tone appropriate for a constitutional or legislativ
             system_prompt=system_prompt,
             messages=[{
                 "role": "user",
-                "content": f"Topic of the convention: {prompt}\n{doc_context}\nFull debate transcript:\n\n{transcript}\n\nNow produce the final document."
+                "content": f"Topic of the convention: {prompt}\n{doc_context}\nFull debate transcript:\n\n{transcript}\n\nNow produce the final document. Keep it under 2000 words."
             }],
             max_tokens=4096,
             provider_config=provider_config,
         )
+        text = ensure_complete_sentence(text)
         return jsonify({"document": text})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

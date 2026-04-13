@@ -151,6 +151,28 @@ def parse_delegate_file(filepath):
     identity_match = re.search(r"\*\*Identity:\*\*\s*(.+?)(?:\n|$)", content)
     bio = identity_match.group(1).strip() if identity_match else ""
     display_bio = re.sub(r"^You are\s+", "", bio)
+    # Truncate bio to first natural clause for concise card display
+    # Cut at first comma after the name/dates, or first period
+    short_bio = display_bio
+    # Try to find closing paren after dates, then take the descriptor after it
+    paren_match = re.match(r"^(.+?\([^)]+\)),?\s*(.+)", short_bio)
+    if paren_match:
+        # e.g. "James Madison (1751-1836), the brilliant political theorist known as..."
+        name_part = paren_match.group(1)
+        rest = paren_match.group(2)
+        # Take rest up to first period or second comma
+        rest_short = re.split(r"\.|,\s*(?:and|who|the principal)", rest)[0].strip()
+        # Cap the rest portion
+        if len(rest_short) > 80:
+            rest_short = rest_short[:77].rsplit(" ", 1)[0]
+        short_bio = f"{name_part}, {rest_short}"
+    elif len(short_bio) > 120:
+        short_bio = re.split(r"\.\s", short_bio)[0]
+        if len(short_bio) > 120:
+            short_bio = short_bio[:117].rsplit(" ", 1)[0]
+    # Remove any trailing punctuation artifacts
+    short_bio = short_bio.rstrip(" ,;")
+    display_bio = short_bio
 
     philosophy_section = ""
     phil_match = re.search(r"## 2\. Core Philosophy.*?\n(.*?)(?=## 3\.)", content, re.DOTALL)

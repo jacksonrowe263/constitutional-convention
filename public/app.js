@@ -186,7 +186,10 @@ async function api(endpoint, data, retries = 2) {
 function withProvider(data) {
     const custom = state.delegates
         .filter(d => d.custom && d.full_content)
-        .map(d => ({ id: d.id, name: d.name, full_content: d.full_content }));
+        .map(d => ({ id: d.id, name: d.name, full_content: d.full_content, leanings: d.leanings || "", category: d.category || "Custom" }));
+    if (custom.length > 0) {
+        console.log(`withProvider: sending ${custom.length} custom delegates:`, custom.map(d => d.id));
+    }
     return { ...data, ...getProviderConfig(), custom_delegates: custom };
 }
 

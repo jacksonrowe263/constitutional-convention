@@ -295,9 +295,20 @@ def auto_select():
     count = data.get("count", 5)
     provider_config = get_provider_config(data)
 
+    custom_delegates = data.get("custom_delegates") or []
+
+    # Combine all known delegates: built-in + server custom + client custom
     all_dels = ALL_DELEGATES + CUSTOM_DELEGATES
+    client_ids = {d.get("id") for d in custom_delegates}
+    for cd in custom_delegates:
+        if cd.get("id") not in {d["id"] for d in all_dels}:
+            all_dels.append(cd)
+
+    # Build valid ID set for filtering AI response
+    valid_ids = {d["id"] for d in all_dels}
+
     delegate_summaries = "\n".join(
-        f"- {d['id']}: {d['name']} ({d['category']}) — {d['leanings']}"
+        f"- {d['id']}: {d.get('name', d['id'])} ({d.get('category', 'Custom')}) — {d.get('leanings', '')}"
         for d in all_dels
     )
 
@@ -314,7 +325,7 @@ def auto_select():
         json_match = re.search(r"\[.*\]", text, re.DOTALL)
         if json_match:
             selected_ids = json.loads(json_match.group())
-            selected_ids = [sid for sid in selected_ids if sid in DELEGATE_MAP]
+            selected_ids = [sid for sid in selected_ids if sid in valid_ids]
             return jsonify({"selected": selected_ids})
         return jsonify({"selected": [], "error": "Could not parse AI response"}), 500
     except Exception as e:
@@ -332,17 +343,29 @@ def lookup_delegate(delegate_id, client_custom_delegates=None):
     if client_custom_delegates:
         for d in client_custom_delegates:
             if d.get("id") == delegate_id:
+                logger.info(f"Found delegate '{delegate_id}' in client-provided custom delegates")
                 return d
+    logger.warning(f"lookup_delegate: '{delegate_id}' not found anywhere. "
+                   f"DELEGATE_MAP has {len(DELEGATE_MAP)} entries, "
+                   f"CUSTOM_DELEGATES has {len(CUSTOM_DELEGATES)} entries, "
+                   f"client_custom has {len(client_custom_delegates or [])} entries")
     return None
 
 
 def build_delegate_name_map(delegate_ids, client_custom_delegates=None):
-    """Build a mapping of delegate IDs to names."""
+    """Build a mapping of delegate IDs to names.
+    Always returns an entry for every ID (falls back to the ID itself).
+    """
     names = {}
     for did in delegate_ids:
         d = lookup_delegate(did, client_custom_delegates)
         if d:
             names[did] = d["name"]
+        else:
+            logger.warning(f"build_delegate_name_map: could not find delegate '{did}', "
+                           f"client_custom_delegates has {len(client_custom_delegates or [])} entries: "
+                           f"{[cd.get('id') for cd in (client_custom_delegates or [])]}")
+            names[did] = did  # Fallback to ID so we never get a KeyError
     return names
 
 
@@ -507,8 +530,14 @@ def debate_turn():
     turn_number = data.get("turn_number", 0)
     total_turns = data.get("total_turns", 15)
     reference_document = data.get("reference_document", "")
-    custom_delegates = data.get("custom_delegates", [])
+    custom_delegates = data.get("custom_delegates") or []
     provider_config = get_provider_config(data)
+
+    # Log custom delegate info for debugging
+    logger.info(f"debate_turn: delegate_id={delegate_id}, "
+                f"all_delegate_ids={delegate_ids}, "
+                f"custom_delegates count={len(custom_delegates)}, "
+                f"custom_delegate_ids={[d.get('id') for d in custom_delegates]}")
 
     delegate = lookup_delegate(delegate_id, custom_delegates)
     if not delegate:
@@ -536,7 +565,7 @@ CONVENTION CONTEXT:
 You are participating in a constitutional convention. The topic under deliberation is:
 "{prompt}"
 {doc_context}
-Other delegates present: {', '.join(delegate_names[did] for did in delegate_ids if did != delegate_id)}
+Other delegates present: {', '.join(delegate_names.get(did, did) for did in delegate_ids if did != delegate_id)}
 
 This is turn {turn_number + 1} of approximately {total_turns} total turns in the debate.
 
@@ -576,7 +605,7 @@ def generate_document():
     history = data.get("history", [])
     delegate_ids = data.get("all_delegate_ids", [])
     reference_document = data.get("reference_document", "")
-    custom_delegates = data.get("custom_delegates", [])
+    custom_delegates = data.get("custom_delegates") or []
     provider_config = get_provider_config(data)
 
     delegate_names = build_delegate_name_map(delegate_ids, custom_delegates)
@@ -625,7 +654,7 @@ def progress_document():
     history = data.get("history", [])
     delegate_ids = data.get("all_delegate_ids", [])
     reference_document = data.get("reference_document", "")
-    custom_delegates = data.get("custom_delegates", [])
+    custom_delegates = data.get("custom_delegates") or []
     provider_config = get_provider_config(data)
 
     delegate_names = build_delegate_name_map(delegate_ids, custom_delegates)

@@ -71,6 +71,10 @@
                         <span id="doc-char-count" class="char-count"></span>
                         <button id="btn-remove-doc" class="btn btn-ghost btn-small">Remove</button>
                     </div>
+                    <div id="doc-upload-spinner" class="inline-spinner hidden">
+                        <div class="spinner-small"></div>
+                        <span>Extracting text...</span>
+                    </div>
                 </div>
             </section>
 
@@ -131,11 +135,21 @@
                             <span id="delegate-source-filename" class="uploaded-filename"></span>
                             <button id="btn-remove-delegate-source" class="btn btn-ghost btn-small">Remove</button>
                         </div>
+                        <div id="delegate-source-spinner" class="inline-spinner hidden">
+                            <div class="spinner-small"></div>
+                            <span>Reading file...</span>
+                        </div>
                     </div>
                     <div id="source-paste-area" class="source-area hidden">
                         <textarea id="delegate-source-text" rows="4" placeholder="Paste biography, Wikipedia article, speeches, or other source material here..."></textarea>
                     </div>
-                    <button id="btn-create-delegate" class="btn btn-secondary" style="margin-top: 0.75rem;">Create Delegate</button>
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem;">
+                        <button id="btn-create-delegate" class="btn btn-secondary">Create Delegate</button>
+                        <div id="create-delegate-spinner" class="inline-spinner hidden">
+                            <div class="spinner-small"></div>
+                            <span>Generating persona...</span>
+                        </div>
+                    </div>
                 </div>
                 <div id="custom-delegates-list" class="custom-delegates-list"></div>
             </section>

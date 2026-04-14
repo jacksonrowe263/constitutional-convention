@@ -71,6 +71,7 @@ const els = {
     loadingOverlay: $("#loading-overlay"),
     loadingMessage: $("#loading-message"),
     // Document upload
+    docUploadSpinner: $("#doc-upload-spinner"),
     docUploadArea: $("#doc-upload-area"),
     docFileInput: $("#doc-file-input"),
     docUploadPrompt: $("#doc-upload-prompt"),
@@ -88,9 +89,11 @@ const els = {
     delegateSourcePrompt: $("#delegate-source-prompt"),
     delegateSourceStatus: $("#delegate-source-status"),
     delegateSourceFilename: $("#delegate-source-filename"),
+    delegateSourceSpinner: $("#delegate-source-spinner"),
     btnRemoveDelegateSource: $("#btn-remove-delegate-source"),
     delegateSourceText: $("#delegate-source-text"),
     btnCreateDelegate: $("#btn-create-delegate"),
+    createDelegateSpinner: $("#create-delegate-spinner"),
     customDelegatesList: $("#custom-delegates-list"),
 };
 
@@ -675,20 +678,21 @@ async function handleDocUpload() {
     const file = els.docFileInput.files[0];
     if (!file) return;
 
-    showLoading("Extracting text from document...");
+    els.docUploadPrompt.classList.add("hidden");
+    els.docUploadSpinner.classList.remove("hidden");
     try {
         const result = await uploadFile(els.docFileInput);
         state.referenceDocument = result.text;
         els.docFilename.textContent = result.filename;
         els.docCharCount.textContent = `(${result.text.length.toLocaleString()} characters)`;
-        els.docUploadPrompt.classList.add("hidden");
         els.docUploadStatus.classList.remove("hidden");
         els.docUploadArea.classList.add("has-file");
     } catch (e) {
         alert("Failed to upload document: " + e.message);
+        els.docUploadPrompt.classList.remove("hidden");
         els.docUploadArea.classList.remove("has-file");
     } finally {
-        hideLoading();
+        els.docUploadSpinner.classList.add("hidden");
     }
 }
 
@@ -725,17 +729,18 @@ els.delegateSourceFile.addEventListener("change", async () => {
     const file = els.delegateSourceFile.files[0];
     if (!file) return;
 
-    showLoading("Reading source file...");
+    els.delegateSourcePrompt.classList.add("hidden");
+    els.delegateSourceSpinner.classList.remove("hidden");
     try {
         const result = await uploadFile(els.delegateSourceFile);
         state.delegateSourceText = result.text;
         els.delegateSourceFilename.textContent = result.filename;
-        els.delegateSourcePrompt.classList.add("hidden");
         els.delegateSourceStatus.classList.remove("hidden");
     } catch (e) {
         alert("Failed to read file: " + e.message);
+        els.delegateSourcePrompt.classList.remove("hidden");
     } finally {
-        hideLoading();
+        els.delegateSourceSpinner.classList.add("hidden");
     }
 });
 
@@ -767,7 +772,8 @@ els.btnCreateDelegate.addEventListener("click", async () => {
         return;
     }
 
-    showLoading(`Creating delegate persona for ${name}...`);
+    els.btnCreateDelegate.disabled = true;
+    els.createDelegateSpinner.classList.remove("hidden");
     try {
         const result = await api("/create-delegate", withProvider({
             name,
@@ -802,7 +808,8 @@ els.btnCreateDelegate.addEventListener("click", async () => {
     } catch (e) {
         alert("Failed to create delegate: " + e.message);
     } finally {
-        hideLoading();
+        els.btnCreateDelegate.disabled = false;
+        els.createDelegateSpinner.classList.add("hidden");
     }
 });
 

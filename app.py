@@ -321,21 +321,26 @@ def auto_select():
         return jsonify({"error": str(e)}), 500
 
 
-def lookup_delegate(delegate_id):
-    """Look up a delegate by ID from built-in or custom delegates."""
+def lookup_delegate(delegate_id, client_custom_delegates=None):
+    """Look up a delegate by ID from built-in, server custom, or client-provided custom delegates."""
     if delegate_id in DELEGATE_MAP:
         return DELEGATE_MAP[delegate_id]
     for d in CUSTOM_DELEGATES:
         if d["id"] == delegate_id:
             return d
+    # Fall back to client-provided custom delegates (stateless support)
+    if client_custom_delegates:
+        for d in client_custom_delegates:
+            if d.get("id") == delegate_id:
+                return d
     return None
 
 
-def build_delegate_name_map(delegate_ids):
+def build_delegate_name_map(delegate_ids, client_custom_delegates=None):
     """Build a mapping of delegate IDs to names."""
     names = {}
     for did in delegate_ids:
-        d = lookup_delegate(did)
+        d = lookup_delegate(did, client_custom_delegates)
         if d:
             names[did] = d["name"]
     return names
@@ -502,13 +507,14 @@ def debate_turn():
     turn_number = data.get("turn_number", 0)
     total_turns = data.get("total_turns", 15)
     reference_document = data.get("reference_document", "")
+    custom_delegates = data.get("custom_delegates", [])
     provider_config = get_provider_config(data)
 
-    delegate = lookup_delegate(delegate_id)
+    delegate = lookup_delegate(delegate_id, custom_delegates)
     if not delegate:
         return jsonify({"error": f"Unknown delegate: {delegate_id}"}), 400
 
-    delegate_names = build_delegate_name_map(delegate_ids)
+    delegate_names = build_delegate_name_map(delegate_ids, custom_delegates)
 
     # Build reference document context if provided
     doc_context = ""
@@ -570,9 +576,10 @@ def generate_document():
     history = data.get("history", [])
     delegate_ids = data.get("all_delegate_ids", [])
     reference_document = data.get("reference_document", "")
+    custom_delegates = data.get("custom_delegates", [])
     provider_config = get_provider_config(data)
 
-    delegate_names = build_delegate_name_map(delegate_ids)
+    delegate_names = build_delegate_name_map(delegate_ids, custom_delegates)
 
     transcript = condense_transcript(history, delegate_names)
 
@@ -618,9 +625,10 @@ def progress_document():
     history = data.get("history", [])
     delegate_ids = data.get("all_delegate_ids", [])
     reference_document = data.get("reference_document", "")
+    custom_delegates = data.get("custom_delegates", [])
     provider_config = get_provider_config(data)
 
-    delegate_names = build_delegate_name_map(delegate_ids)
+    delegate_names = build_delegate_name_map(delegate_ids, custom_delegates)
 
     transcript = condense_transcript(history, delegate_names)
 
@@ -770,6 +778,7 @@ Make the persona vivid, detailed, and faithful to the actual views and style of 
             "leanings": philosophy_section,
             "category": "Custom",
             "custom": True,
+            "full_content": persona_content,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500

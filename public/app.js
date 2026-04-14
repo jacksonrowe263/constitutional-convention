@@ -182,9 +182,12 @@ async function api(endpoint, data, retries = 2) {
     }
 }
 
-// Helper: inject provider config into POST data
+// Helper: inject provider config and custom delegates into POST data
 function withProvider(data) {
-    return { ...data, ...getProviderConfig() };
+    const custom = state.delegates
+        .filter(d => d.custom && d.full_content)
+        .map(d => ({ id: d.id, name: d.name, full_content: d.full_content }));
+    return { ...data, ...getProviderConfig(), custom_delegates: custom };
 }
 
 // ---- Delegate list ----

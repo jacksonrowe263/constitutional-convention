@@ -496,7 +496,7 @@ textarea:focus {
 .delegate-card .custom-badge {
     position: absolute;
     top: 0.5rem;
-    left: 0.5rem;
+    right: 0.5rem;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 0.65rem;
     font-weight: 600;

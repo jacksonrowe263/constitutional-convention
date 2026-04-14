@@ -712,10 +712,15 @@ els.btnRemoveDoc.addEventListener("click", (e) => {
 
 // Source input tabs
 els.btnSourceFile.addEventListener("click", () => {
+    const wasActive = els.btnSourceFile.classList.contains("active");
     els.btnSourceFile.classList.add("active");
     els.btnSourcePaste.classList.remove("active");
     els.sourceFileArea.classList.remove("hidden");
     els.sourcePasteArea.classList.add("hidden");
+    // If already on the file tab, open the file picker directly
+    if (wasActive && !state.delegateSourceText) {
+        els.delegateSourceFile.click();
+    }
 });
 
 els.btnSourcePaste.addEventListener("click", () => {
@@ -725,8 +730,28 @@ els.btnSourcePaste.addEventListener("click", () => {
     els.sourceFileArea.classList.add("hidden");
 });
 
-// Delegate source file upload
-els.delegateSourcePrompt.addEventListener("click", () => els.delegateSourceFile.click());
+// Delegate source file upload — click and drag-and-drop
+els.sourceFileArea.addEventListener("click", (e) => {
+    if (e.target.closest("#btn-remove-delegate-source")) return;
+    if (!state.delegateSourceText) els.delegateSourceFile.click();
+});
+
+els.sourceFileArea.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    els.sourceFileArea.classList.add("has-file");
+});
+
+els.sourceFileArea.addEventListener("dragleave", () => {
+    if (!state.delegateSourceText) els.sourceFileArea.classList.remove("has-file");
+});
+
+els.sourceFileArea.addEventListener("drop", (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files.length) {
+        els.delegateSourceFile.files = e.dataTransfer.files;
+        els.delegateSourceFile.dispatchEvent(new Event("change"));
+    }
+});
 
 els.delegateSourceFile.addEventListener("change", async () => {
     const file = els.delegateSourceFile.files[0];
@@ -739,19 +764,23 @@ els.delegateSourceFile.addEventListener("change", async () => {
         state.delegateSourceText = result.text;
         els.delegateSourceFilename.textContent = result.filename;
         els.delegateSourceStatus.classList.remove("hidden");
+        els.sourceFileArea.classList.add("has-file");
     } catch (e) {
         alert("Failed to read file: " + e.message);
         els.delegateSourcePrompt.classList.remove("hidden");
+        els.sourceFileArea.classList.remove("has-file");
     } finally {
         els.delegateSourceSpinner.classList.add("hidden");
     }
 });
 
-els.btnRemoveDelegateSource.addEventListener("click", () => {
+els.btnRemoveDelegateSource.addEventListener("click", (e) => {
+    e.stopPropagation();
     state.delegateSourceText = "";
     els.delegateSourceFile.value = "";
     els.delegateSourcePrompt.classList.remove("hidden");
     els.delegateSourceStatus.classList.add("hidden");
+    els.sourceFileArea.classList.remove("has-file");
 });
 
 // Create delegate button

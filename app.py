@@ -745,12 +745,21 @@ Make the persona vivid, detailed, and faithful to the actual views and style of 
             provider_config=provider_config,
         )
 
-        # Parse the generated content to extract bio and leanings
+        # Generate a short 3rd-person bio for the delegate card
         delegate_id = f"custom_{uuid.uuid4().hex[:8]}"
 
-        identity_match = re.search(r"\*\*Identity:\*\*\s*(.+?)(?:\n|$)", persona_content)
-        bio = identity_match.group(1).strip() if identity_match else f"Custom delegate: {name}"
-        display_bio = re.sub(r"^You are\s+", "", bio)
+        try:
+            display_bio = chat_completion(
+                system_prompt="Write a single concise sentence (under 100 characters) describing this person in the THIRD person for a delegate card. No quotes. Example: 'Pioneering feminist litigator and Supreme Court Justice.'",
+                messages=[{
+                    "role": "user",
+                    "content": f"Write a short third-person bio for: {name}\n\nPersona:\n{persona_content[:2000]}"
+                }],
+                max_tokens=100,
+                provider_config=provider_config,
+            ).strip().strip('"\'')
+        except Exception:
+            display_bio = f"Custom delegate: {name}"
 
         philosophy_section = ""
         phil_match = re.search(r"## 2\. Core Philosophy.*?\n(.*?)(?=## 3\.)", persona_content, re.DOTALL)

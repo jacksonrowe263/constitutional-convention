@@ -538,7 +538,7 @@ INSTRUCTIONS:
 - Stay completely in character as {delegate['name']}.
 - Respond to specific points made by other delegates — agree, disagree, build upon, or challenge their arguments.
 - Do NOT simply give a monologue. Engage directly with what others have said.
-- Keep your response to 2-4 paragraphs. Be substantive but concise.
+- Keep your response to 1-4 paragraphs. Be substantive but concise. Shorter responses are fine when the point is simple.
 - If this is your first time speaking, introduce your position on the topic.
 - OUTPUT ONLY THE WORDS YOU SPEAK. Do NOT include any narration, stage directions, action descriptions, or third-person commentary (e.g. no "*leans forward*", "*adjusts spectacles*", "*pauses thoughtfully*", "he said firmly", etc.). Write only direct speech as if you are speaking aloud at the convention.
 - {"As this is one of the final turns, begin working toward areas of potential compromise or agreement where possible, while still staying true to your principles." if turn_number >= total_turns - 4 else ""}
